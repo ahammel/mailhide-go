@@ -19,10 +19,8 @@ var EmailAddress = os.Getenv("EMAIL_ADDRESS")
 
 // Request/response data
 var ResponseHeaders = map[string]string{
-	"Content-Type": "text/html; charset=utf-8",
+	"Content-Type": "application/json",
 }
-
-// HTML templates
 
 type SiteVerifyResponse struct {
 	Success            bool     `json:"success"`
@@ -32,17 +30,56 @@ type SiteVerifyResponse struct {
 	ErrorCodes         []string `json:"error-codes"`
 }
 
-func Respond(body string, status int) events.APIGatewayProxyResponse {
-	return events.APIGatewayProxyResponse{
-		Body: body, StatusCode: status, Headers: ResponseHeaders}
+type SecretHideResponse struct {
+	Success    bool     `json:"success"`
+	Secret     *string  `json:"secret"`
 }
 
-func ErrorResponse(err error) string {
-	return fmt.Sprintf(
-		"<p>mailhide-go has encountered an error. Sorry ¯\\_(ツ)_/¯</p>"+
-			"<p>Details:</p>"+
-			"<pre>%s</pre>"+
-			"<button onclick=\"history.go(-1);\">Back </button>", err)
+type SecretHideErrorResponse struct {
+	Status string `json:"status"`
+	Title  string `json:"title"`
+	Detail string `json:"detail"`
+}
+
+func RespondSuccess(secret string) events.APIGatewayProxyResponse {
+	resp := SecretHideResponse{Success:true, Secret: &secret}
+	body, err := json.Marshal(resp)
+
+	if err != nil {
+		fmt.Printf("Error serializing success response: %+v. Details: %v \n", resp, err)
+	}
+
+	return events.APIGatewayProxyResponse{
+		Body: string(body), StatusCode: 200, Headers: ResponseHeaders}
+}
+
+func RespondFailure() events.APIGatewayProxyResponse {
+	resp := SecretHideResponse{Success:false, Secret: nil}
+	body, err := json.Marshal(resp)
+
+	if err != nil {
+		fmt.Printf("Error serializing failure response: %+v. Details: %v \n", resp, err)
+	}
+
+	return events.APIGatewayProxyResponse{
+		Body: string(body), StatusCode: 200, Headers: ResponseHeaders}
+}
+
+func RespondError(status int, title string, theError error) events.APIGatewayProxyResponse {
+	resp := SecretHideErrorResponse{
+		Status: string(status),
+		Title: title,
+		Detail: fmt.Sprintf("%+v", theError)}
+
+	body, err := json.Marshal(resp)
+
+	if err != nil {
+		fmt.Printf("Error serializing error response: %+v. Details: %v \n", resp, err)
+	}
+
+	return events.APIGatewayProxyResponse{
+		Body: string(body), StatusCode: status, Headers: ResponseHeaders}
+
 }
 
 func HandleRequest(
@@ -52,7 +89,7 @@ func HandleRequest(
 	form, err := url.ParseQuery(request.Body)
 
 	if err != nil {
-		return Respond(ErrorResponse(err), 400), nil
+		return RespondError(400, "BadRequest", err), nil
 	}
 
 	formFields, ok := form["g-recaptcha-response"]
@@ -60,7 +97,7 @@ func HandleRequest(
 
 	if !ok {
 		err = errors.New("key 'g-recaptcha-response' absent from request data")
-		return Respond(ErrorResponse(err), 400), nil
+		return RespondError(400, "BadRequest", err), nil
 	}
 
 	fmt.Printf("ReCaptcha response: %s\n", reCaptcha)
@@ -72,7 +109,7 @@ func HandleRequest(
 			reCaptcha))
 
 	if err != nil {
-		return Respond(ErrorResponse(err), 500), nil
+		return RespondError(500, "HttpRequestError", err), nil
 	}
 
 	if resp.StatusCode != 200 {
@@ -84,7 +121,7 @@ func HandleRequest(
 				resp.StatusCode,
 				bodyString))
 
-		return Respond(ErrorResponse(err), 500), nil
+		return RespondError(500, "SiteverifyError", err), nil
 	}
 
 	decoder := json.NewDecoder(resp.Body)
@@ -94,24 +131,16 @@ func HandleRequest(
 	defer resp.Body.Close()
 
 	if err != nil {
-		return Respond(ErrorResponse(err), 500), nil
+		return RespondError(500, "DeserializationError", err), nil
 	}
 
 	fmt.Printf("SiteVerify response: %+v\n", siteVerify)
 
 	if !siteVerify.Success {
-
-		return Respond(
-			"<p>reCAPTCHA failed</p> <button onclick=\"history.go(-1);\">Back </button>",
-			200), nil
+		return RespondFailure(), nil
 	}
 
-	return Respond(
-		fmt.Sprintf(
-			"<p><a href=\"mailto:%s\">%s</a></p>",
-			EmailAddress,
-			EmailAddress),
-		200), nil
+	return RespondSuccess(EmailAddress), nil
 }
 
 func main() {
