@@ -23,10 +23,11 @@ var ResponseHeaders = map[string]string{
 }
 
 type SiteVerifyResponse struct {
-	Success            bool    `json:"success"`
-	ChallengeTimestamp string  `json:"challenge_ts"`
-	Hostname           string  `json:"hostname"`
-	Score              float32 `json:"score"`
+	Success            bool     `json:"success"`
+	ChallengeTimestamp string   `json:"challenge_ts"`
+	Hostname           string   `json:"hostname"`
+	Score              float32  `json:"score"`
+	ErrorCodes         []string `json:"error-codes"`
 }
 
 func Respond(body string, status int) events.APIGatewayProxyResponse {
