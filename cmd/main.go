@@ -22,6 +22,8 @@ var ResponseHeaders = map[string]string{
 	"Content-Type": "text/html; charset=utf-8",
 }
 
+// HTML templates
+
 type SiteVerifyResponse struct {
 	Success            bool     `json:"success"`
 	ChallengeTimestamp string   `json:"challenge_ts"`
@@ -57,7 +59,7 @@ func HandleRequest(
 	reCaptcha := formFields[0]
 
 	if !ok {
-		err = errors.New("key 'g-recaptcha-response' absent from form data")
+		err = errors.New("key 'g-recaptcha-response' absent from request data")
 		return Respond(ErrorResponse(err), 400), nil
 	}
 
@@ -76,7 +78,12 @@ func HandleRequest(
 	if resp.StatusCode != 200 {
 		bodyBytes, _ := ioutil.ReadAll(resp.Body)
 		bodyString := string(bodyBytes)
-		err = errors.New(fmt.Sprintf("reCaptcha response %s\n", bodyString))
+		err = errors.New(
+			fmt.Sprintf(
+				"siteverify responded with %d. Body of repsonse: %s\n",
+				resp.StatusCode,
+				bodyString))
+
 		return Respond(ErrorResponse(err), 500), nil
 	}
 
